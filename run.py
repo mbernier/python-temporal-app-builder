@@ -10,9 +10,9 @@ WORKFLOW_NAMESPACE  = "{{WORKFLOW_NAME_SPACE}}"
 SERVER_LOCATION_KEY = "{{SERVER_LOCATION}}"
 SERVER_LOCATION     = "localhost:7233"
 WORKFLOW_NAMESPACE_KEY = "{{WORKFLOW_NAMESPACE}}"
-WORKFLOW_NAMESPACE = "poker-game"
-WORKFLOW_WORKFLOW_TASK_QUEUE_KEY = "{{WORKFLOW_WORKFLOW_TASK_QUEUE}}"
-WORKFLOW_WORKFLOW_TASK_QUEUE = "poker-game-task-queue"
+WORKFLOW_NAMESPACE = "background-check"
+WORKFLOW_TASK_QUEUE_KEY = "{{WORKFLOW_TASK_QUEUE}}"
+WORKFLOW_TASK_QUEUE = "poker-game-task-queue"
 
 def read_file(filepath):
     f = open(filepath, "r")
@@ -81,6 +81,17 @@ class File_Base():
             return False
         return True
 
+    @validate_arguments
+    def content(self, content:str, action:FileActionEnum = "write"):
+        if action == "append":
+            self.content += content
+
+        if action == "write":
+            self.content = content
+
+    @validate_arguments
+    def get_content(self):
+        return self.content
 
 class Builder_File(File_Base):
 
@@ -105,15 +116,6 @@ class Builder_File(File_Base):
                 for item in importItems:
                     self.add_import(source=source, name=item)
     
-
-    @validate_arguments
-    def content(self, content:str, action:FileActionEnum = "write"):
-        if action == "append":
-            self.content += content
-
-        if action == "write":
-            self.content = content
-    
     @validate_arguments
     def add_import(self, name:str, source:str="python"):
         if not source in self.imports.keys():
@@ -127,14 +129,12 @@ class Builder_File(File_Base):
             raise Builder_File_Exception(f"{find_key} is already in replace_keys for {self.destination}")
         self.replace_keys[find_key] = replace_key
 
-    @validate_arguments
     def __find_replace(self) -> str:
         for findstr, replacestr in self.replace_keys.items():
             if findstr in self.content:
                 self.content = self.content.replace(findstr, replacestr)
         return self.content
 
-    @validate_arguments
     def __create_imports(self) -> str:
         output = ""
         for source, importItems in self.imports.items():
@@ -149,15 +149,16 @@ class Builder_File(File_Base):
         
         return output + "\n"
 
-    @validate_arguments
     def __write(self):
+        if not os.path.exists(os.path.dirname(self.destination)):
+            os.mkdir(os.path.dirname(self.destination))
+
         f = open(self.destination, "w")
         imports = self.__create_imports()
         info = imports + self.__find_replace()
         f.write(f"{info}")
         f.close()
 
-    @validate_arguments
     def commit(self):
         self.__write()
 
@@ -221,10 +222,11 @@ class Builder():
         output:str = ""
         if len(self.activities) > 0:
             for activity, source_files in self.activities.items():
-                activity_replace = "{{%s_CODE}}" % activity.upper()
+                file_content = File_Base(source_files)
+                activity_replace = file_content.get_content()
                 output += f"""
-activity.defn
-async def poker_activity() -> None:
+@activity.defn
+async def {activity}() -> None:
     {activity_replace}
 """ 
                 output += "\n\n"
@@ -235,11 +237,11 @@ async def poker_activity() -> None:
         output:str = ""
         
         if len(self.activities) > 0:
-            for activity in self.activities:
+            for activity, files in self.activities.items():
                 output += """return await workflow.execute_activity(
-    {{WORKFLOW_ACTIVITY}},
-    start_to_close_timeout=timedelta(seconds=10),
-)
+                    {{WORKFLOW_ACTIVITY}},
+                    start_to_close_timeout=timedelta(seconds=10),
+                )
                 """.replace("{{WORKFLOW_ACTIVITY}}", activity)
                 output += "\n\n"
         
@@ -253,38 +255,56 @@ async def poker_activity() -> None:
                 self.files[filename].add_replace_key("{{ACTIVITY_METHODS}}", self.__make_activity_methods())
                 self.files[filename].add_replace_key("{{EXECUTE_ACTIVITIES}}", self.__make_execute_activities())
             fileobj.commit()
+        print(f"Application created in {self.destination_dir}")
+
+from pathlib import Path
 
 def main():
-    current_dir     = os.path.dirname(__file__)
-    destination_dir = current_dir + "/destination/"
-    program_name    = "poker"
-    builder         = Builder(program_name, destination_dir)
-    
+
+    path_dir            = Path(os.path.dirname(__file__))
+    current_dir         = str(path_dir)
+    destination_dir     = str(path_dir.parent) + "/poker-destination/"
+    # destination_dir     = str(path_dir) + "/destination/"
+    program_name        = "poker"
+    builder             = Builder(program_name, destination_dir)
     workflow_class_name = f"{program_name.capitalize()}Workflow"
-    activity_name = f"{program_name}_activity"
+    activity_name       = f"{program_name}_activity"
 
     builder.add_activity(
         activity_name, 
         source_files = [current_dir + "/sources/poker-activity-code.py.txt"]
     )
 
-    builder.add_replace_key(WORKFLOW_WORKFLOW_TASK_QUEUE_KEY, WORKFLOW_WORKFLOW_TASK_QUEUE)
-    builder.add_replace_key(WORKFLOW_NAMESPACE_KEY, WORKFLOW_NAMESPACE)
-    builder.add_replace_key(SERVER_LOCATION_KEY, SERVER_LOCATION)
-    builder.add_replace_key(WORKFLOW_CLASS,         workflow_class_name)
-    builder.add_replace_key(WORKFLOW_ID,            f"{program_name}-workflow-id")
-    builder.add_replace_key(WORKFLOW_TASK_QUEUE,    f"{program_name}WORKFLOW_TASK_QUEUE")
-    builder.add_replace_key(WORKFLOW_ACTIVITIES,    ", ".join(builder.get_activities()))
-    builder.add_replace_key(WORKFLOW_NAMESPACE,     f"{program_name}-namespace")
+    builder.add_file(
+        filename="gitignore", 
+        source_files = [
+            current_dir + "/templates/gitignore.txt"
+        ],
+        destination_file=f"{destination_dir}.gitignore"
+    )
+
+    builder.add_file(
+        filename="dataclasses", 
+        source_files = [
+            current_dir + "/sources/classes.py"
+        ],
+        imports = {
+            "python": ["random"]
+        },
+        destination_file=f"{destination_dir}dataobjs.py"
+    )
     
     program_file_name = "program_file"
     builder.add_file(
         filename=program_file_name, 
         source_files = [
-            current_dir + "/sources/imports.py",
-            current_dir + "/sources/classes.py",
             current_dir + "/templates/workflow.py.txt"
         ],
+        imports = {
+            "dataobjs": ["StandardDeck", "Player", "PokerScorer"],
+            "datetime": ["timedelta"],
+            "temporalio": ["activity", "workflow"]
+        },
         destination_file=f"{destination_dir}{program_name}.py"
     )
 
@@ -298,6 +318,9 @@ def main():
         imports = {
             "python": ["asyncio"],
             "client": ["temporal_client"],
+            "datetime": ["timedelta"],
+            "temporalio": ["service"],
+            "temporalio.common": ["RetryPolicy"],
             program_name: workflow_class_imports_list
         },
         destination_file = f"{destination_dir}/app.py"
@@ -322,7 +345,7 @@ def main():
             "client": ["temporal_client"],
             "datetime": ["timedelta"],
             "temporalio.worker": ["Worker"],
-            program_name: workflow_class_imports_list  + [f"{program_name}_activity"] 
+            program_name: workflow_class_imports_list  + [activity_name] 
         },
         destination_file = f"{destination_dir}/worker.py"
     )
@@ -339,6 +362,14 @@ def main():
         destination_file = destination_dir + "/config.py"
     )
     
+    builder.add_replace_key(WORKFLOW_TASK_QUEUE_KEY, WORKFLOW_TASK_QUEUE)
+    builder.add_replace_key(WORKFLOW_NAMESPACE_KEY, WORKFLOW_NAMESPACE)
+    builder.add_replace_key(SERVER_LOCATION_KEY, SERVER_LOCATION)
+    builder.add_replace_key(WORKFLOW_CLASS,         workflow_class_name)
+    builder.add_replace_key(WORKFLOW_ID,            f"{program_name}-workflow-id")
+    builder.add_replace_key(WORKFLOW_TASK_QUEUE,    f"{program_name}-task-queue")
+    builder.add_replace_key(WORKFLOW_ACTIVITIES,    ", ".join(builder.get_activities().keys()))
+
     builder.commit()
 
 if __name__ == "__main__":

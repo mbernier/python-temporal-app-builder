@@ -7,6 +7,7 @@ async def temporal_client():
 
     temporalServer = config('server_location')
     namespace = config('workflow_namespace')
-    
+    print(temporalServer)
+    print(namespace)
     return await Client.connect(temporalServer, namespace=namespace)
 

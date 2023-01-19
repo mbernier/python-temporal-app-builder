@@ -1,13 +1,27 @@
 async def main():
     # logging.basicConfig(level=logging.CRITICAL)
 
-    client = await temporal_client
+    client = await temporal_client()
 
-    result = await client.execute_workflow(
-        {{WORKFLOW_CLASS}}.run,
-        id="{{WORKFLOW_ID}}",
-        WORKFLOW_TASK_QUEUE="{{WORKFLOW_TASK_QUEUE}}",
-    )
+    try:
+        retry_policy = RetryPolicy()
+
+        # logging.info('in try')
+        result = await client.execute_workflow(
+            {{WORKFLOW_CLASS}}.run,
+            id="{{WORKFLOW_ID}}",
+            task_queue="{{WORKFLOW_TASK_QUEUE}}",
+            run_timeout=timedelta(seconds=300),
+            retry_policy=retry_policy
+        )
+    except service.RPCError as err:
+        if err.grpc_status.code != 6: #@todo is there a constant for this?
+            raise
+        
+        result = client.get_workflow_handle_for(
+            {{WORKFLOW_CLASS}}.run,
+            "{{WORKFLOW_ID}}"
+        )
 
     print(f"Result: {result}")
 
