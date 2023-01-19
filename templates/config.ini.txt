@@ -1,0 +1,5 @@
+[Temporal.io]
+worker_graceful_shutdown_timeout=10 ;seconds - how long should the workflow allow activities to complete before shutting down?
+server_location={{SERVER_LOCATION}} ;where is temporal server running? (could be cloud)
+workflow_namespace={{WORKFLOW_NAMESPACE}} ;What namespace should these workers run in?
+WORKFLOW_TASK_QUEUE={{WORKFLOW_WORKFLOW_TASK_QUEUE}} ;name of the task queue

@@ -1,0 +1,29 @@
+# from here: https://docs.camunda.io/docs/0.25/components/zeebe/yaml-workflows/
+# idea would be to conver this into a Temporal workflow
+
+name: order-process
+
+tasks:
+    - id: collect-money
+      type: payment-service
+
+    - id: fetch-items
+      type: inventory-service
+      inputs:
+          - source: totalPrice
+            target: price
+      outputs:
+          - source: success
+            target: paymentSuccess
+      switch:
+          - case: totalPrice > 100
+            goto: ship-parcel-with-insurance
+
+          - default: ship-parcel
+
+    - id: ship-parcel-with-insurance
+      type: shipment-service-premium
+      end: true
+
+    - id: ship-parcel
+      type: shipment-service

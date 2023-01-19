@@ -1,0 +1,12 @@
+{{WORKFLOW_IMPORTS}}
+from datetime import timedelta
+from temporalio import activity, workflow
+
+class {{WORKFLOW_NAME}}:
+
+    @workflow.run
+    def run():
+        {{WORKFLOW_RUN}}
+        {{CALL_ACTIVITIES}}
+        {{END_WORKFLOW}}
+

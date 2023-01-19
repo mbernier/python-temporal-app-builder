@@ -1,0 +1,9 @@
+{{ACTIVITY_METHODS}}
+
+@workflow.defn
+class {{WORKFLOW_CLASS}}:
+
+    @workflow.run
+    async def run(self) -> None:
+        # workflow.logger.critical("Running workflow")
+        {{EXECUTE_ACTIVITIES}}

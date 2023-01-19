@@ -1,0 +1,15 @@
+async def main():
+    # logging.basicConfig(level=logging.CRITICAL)
+
+    client = await temporal_client
+
+    result = await client.execute_workflow(
+        {{WORKFLOW_CLASS}}.run,
+        id="{{WORKFLOW_ID}}",
+        WORKFLOW_TASK_QUEUE="{{WORKFLOW_TASK_QUEUE}}",
+    )
+
+    print(f"Result: {result}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
